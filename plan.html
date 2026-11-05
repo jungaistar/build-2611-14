@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>기획서 — 협력업체 통합 품질관리</title>
+<meta name="robots" content="index,follow">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+<style>
+.plan-figs figure{margin:0 0 22px;} .plan-figs img{width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+.plan-figs figcaption{font-size:13px;color:var(--sub);text-align:center;margin-top:6px;}
+.plan td{white-space:normal;} .plan td .btn{min-height:36px;white-space:nowrap;}
+h3{font-size:15px;margin:16px 0 6px;} main ul{margin:0 0 10px 20px;}
+</style>
+</head>
+<body>
+<nav class="topnav" aria-label="주요 메뉴">
+  <div class="topnav-inner">
+    <a class="topnav-brand" href="index.html">협력업체 통합 품질관리 <small>build-2611-14 · 기획 정유석</small></a>
+    <ul class="topnav-links">
+      <li><a href="index.html">도구</a></li>
+      <li><a href="guide.html">사용법</a></li>
+      <li><a href="plan.html" class="active" aria-current="page">기획서</a></li>
+    </ul>
+  </div>
+</nav>
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">생성형 AI 업무자동화 전문가과정 · 2차수 · 프로젝트 14 · 기획서 v1.0</div>
+  <h1>협력업체 통합 품질관리 기획서</h1>
+  <p>담당자·업체를 한 번 고르면 모든 메뉴가 그 조건을 따르는 화면에서 협력업체 Audit 4종의 점수·판정, 지적사항 개선조치 추적, 업체별 점수 변화, 가로형 공정점검(사진 첨부), 내부 보고·업체 발송 메일 초안을 관리하는 브라우저 도구입니다.</p>
+</div></header>
+<main><div class="wrap">
+<div class="card">
+  <h2 style="margin-top:0">기획서 내려받기</h2>
+  <p class="sub">파이프라인 · 아키텍처 · 와이어프레임 · 개발일지가 들어간 워드 문서입니다. 버전마다 따로 남깁니다.</p>
+  <div class="tablewrap plan"><table><thead><tr><th>버전</th><th>날짜</th><th>바뀐 점</th><th>파일</th></tr></thead><tbody><tr><td><b>v1.0</b></td><td>2026-11-03</td><td>첫 판 — Dashboard(담당자·업체 3단) · Audit 4종 점수·판정 · 양식 엑셀 읽기 · 개선조치 추적 · 점수 분석 · 가로형 공정점검(사진) · 메일 초안 2종 · 엑셀·백업 / 기획서 워드 판·파이프라인·아키텍처·와이어프레임 추가</td><td><a class="btn primary" href="docs/기획서/build-2611-14_정유석_협력업체통합품질관리_기획서_v1.0.docx" download>워드 내려받기</a></td></tr></tbody></table></div>
+</div>
+<div class="card plan">
+  <h2 style="margin-top:0">요구사항과 구현</h2>
+  <div class="tablewrap"><table><thead><tr><th>기획서 요구</th><th>구현</th></tr></thead><tbody><tr><td>대시보드 · 담당자/업체 선택 · 전 메뉴 유지</td><td>선택 줄을 모든 메뉴 위에 두고 localStorage 에 유지, 전체 · 담당자 · 업체 상세 3단</td></tr><tr><td>업체 수 · Audit 건수 · 평균 · 개선 현황 · 비교 그래프 · 상세 표</td><td>KPI 6개 · 업체별 최근 점수 막대 · 업체 표(행을 누르면 업체 상세)</td></tr><tr><td>Audit 4종 HTML 구현 · 기존 항목·배점 유지</td><td>회사 양식 엑셀을 올려 머리글 낱말로 항목·배점·가중치·CTQ·선택지를 읽음(열 직접 고르기 가능)</td></tr><tr><td>점수 입력 · 총점 자동 계산 · 저장 · 이력 · 이전 비교</td><td>양식의 엑셀 식 그대로 · 판정 · 공정별 점수 · 차수 자동 · 이전 대비 증감과 바뀐 항목</td></tr><tr><td>지적사항 · 4단계 상태 · 기한 초과 · 조치 이력 · 반복 지적</td><td>계획 미수립 → 개선 진행중 → 개선 완료 → 확인 완료, 기한 초과 · 재발 자동, 반복 지적 표</td></tr><tr><td>점수 변화 · 종류별 비교 · 개선 효과 · 취약 공정 · 원점수/백분율</td><td>선 그래프 · 종류별 비교 표 · 첫→최근 변화 · 공정별 평균, 원점수와 백분율을 따로 표시</td></tr><tr><td>가로형 공정점검 · 문제점/개선 사진 여러 장 · 진행상태</td><td>기획서 열 순서의 가로 표, 사진은 긴 변 1280px 로 줄여 IndexedDB 저장, 설명 입력</td></tr><tr><td>메일 2종 자동 생성 · 수정 · 복사 · 이력 · 입력 안 된 정보 생성 금지</td><td>내부 보고 6절 · 업체 발송(요청형), 빠진 정보는 「(입력 없음)」과 경고, 복사 · mailto · 이력</td></tr></tbody></table></div>
+</div>
+<div class="card plan-figs"><h2 style="margin-top:0">그림으로 보기</h2><figure><img src="docs/img/pipeline.png" alt="처리 흐름(파이프라인)" loading="lazy"><figcaption>처리 흐름(파이프라인)</figcaption></figure><figure><img src="docs/img/architecture.png" alt="구성(아키텍처)" loading="lazy"><figcaption>구성(아키텍처)</figcaption></figure><figure><img src="docs/img/wireframe-1.png" alt="와이어프레임 — Dashboard — 담당자·업체 선택과 현황" loading="lazy"><figcaption>와이어프레임 — Dashboard — 담당자·업체 선택과 현황</figcaption></figure><figure><img src="docs/img/wireframe-2.png" alt="와이어프레임 — Audit 입력 · 공정점검" loading="lazy"><figcaption>와이어프레임 — Audit 입력 · 공정점검</figcaption></figure><figure><img src="docs/img/screen.png" alt="실제 화면(예제 데이터)" loading="lazy"><figcaption>실제 화면(예제 데이터)</figcaption></figure></div>
+<div class="card"><h2 style="margin-top:0">개발일지</h2><h3>2026-11-03 · 첫 판</h3><ul><li>패들릿 정유석 기획(협력업체 통합 품질관리 시스템)을 작업 지시서(CLAUDE.md)로 옮기고 구현</li><li>엔진 audit.js — 점수식 4종 · 판정 · 지적 상태 · 기한 초과 · 재발 · 집계 · 양식 엑셀 읽기 · 메일 초안 · 내보내기</li><li>화면 — 사이드바 9메뉴 · 선택 줄 · 입력 표 · SVG 그래프 · 사진(IndexedDB) · 엑셀 · 백업</li><li>회사 양식은 구조만 옮기고 항목 문장은 넣지 않음 — 지어낸 예제 양식 4종(samples/)</li><li>계산 테스트 100 · 화면 테스트 46 통과</li></ul></div>
+</div></main>
+<footer><div class="wrap">생성형 AI 업무자동화 전문가과정 · 2차수 · 프로젝트 14 · 기획 정유석 · <a href="https://build-2611-00.jobability.co.kr/">2차수 프로젝트 총괄</a></div></footer>
+</body>
+</html>

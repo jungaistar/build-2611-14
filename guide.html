@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>사용법 — 협력업체 통합 품질관리</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<nav class="topnav" aria-label="주요 메뉴">
+  <div class="topnav-inner">
+    <a class="topnav-brand" href="index.html">협력업체 통합 품질관리 <small>build-2611-14 · 기획 정유석</small></a>
+    <ul class="topnav-links">
+      <li><a href="index.html">도구</a></li>
+      <li><a href="guide.html" class="active" aria-current="page">사용법</a></li>
+      <li><a href="plan.html">기획서</a></li>
+    </ul>
+  </div>
+</nav>
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">사용법</div>
+  <h1>Audit · 개선조치 · 공정점검 · 메일을 한 곳에서</h1>
+  <p>위쪽에서 담당자와 업체를 한 번 고르면 모든 메뉴가 그 조건을 따릅니다.
+  자료는 이 PC 의 브라우저(IndexedDB)에만 저장되고, 파일과 사진은 서버로 올라가지 않습니다.</p>
+</div></header>
+<main><div class="wrap">
+<div class="card">
+  <h2 style="margin-top:0">1. 처음 시작</h2>
+  <p>Dashboard 의 <b>예제로 해보기</b>를 누르면 지어낸 담당자 2명 · 업체 4곳 · Audit 이력이 들어갑니다. 예제 데이터는 실제 사내 데이터가 아닙니다.</p>
+  <p>실제로 쓸 때는 <b>데이터 관리</b>에서 회사 Audit 양식 엑셀을 종류마다 올리고, <b>협력업체 관리</b>에서 담당자와 업체를 등록합니다.</p>
+</div>
+<div class="card">
+  <h2 style="margin-top:0">2. 담당자 · 업체 선택</h2>
+  <ul style="margin-left:20px">
+    <li><b>담당자 미선택</b> — 전체 업체 통합 현황</li>
+    <li><b>담당자 선택</b> — 그 담당자가 관리하는 업체 전체 현황(업체 수 · Audit 건수 · 평균 점수 · 개선조치 · 업체별 점수 비교)</li>
+    <li><b>담당자 + 업체 선택</b> — 그 업체의 상세 현황(종류별 이력 · 점수 변화 · 미완료 개선사항 · 공정점검 이력)</li>
+  </ul>
+  <p>선택은 메뉴를 옮겨도, 브라우저를 다시 열어도 유지됩니다. Audit 입력 · 공정점검 · 메일은 선택한 업체로 바로 열립니다 — 메뉴마다 업체를 다시 고르지 않습니다.</p>
+</div>
+<div class="card">
+  <h2 style="margin-top:0">3. Audit 4종 점수 계산</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>종류</th><th>입력</th><th>총점</th><th>판정</th></tr></thead>
+    <tbody>
+      <tr><td>대형 제관 Audit</td><td>Level 0~3 · 가중치(CTQ 2 · 그 밖 1)</td><td class="wrap">환산 = Level × 가중치<br>총점 = 환산 합 ÷ (가중치 합 × 3) × 100</td><td class="wrap">90 이상 양호 · 75~89 개선요 · 75 미만 불합격</td></tr>
+      <tr><td>Process Audit</td><td>점수 2·1·0·N/A · 가중치 1·2</td><td class="wrap">공정별 10점 = 환산 ÷ 유효 합계 × 10<br>총점 = 환산 합 ÷ (2 × 가중치 합 − 2 × N/A 가중치 합) × 100</td><td class="wrap">공정 Grade: 9 이상 Green · 7 이상 Yellow · 그 밖 Red · 유효 0 이면 N/A</td></tr>
+      <tr><td>PSO</td><td>양호·개선요·미실시 / 상세 OK·NG·N/A + 해당·제외</td><td class="wrap">점수 없음 — 개수와 양호 비율</td><td class="wrap">Issue List Status 1~4 · 목표일 경과 표시</td></tr>
+      <tr><td>도장 Audit</td><td>항목 배점 3·2·1, 선택지 중 평가점수 · N/A</td><td class="wrap">총점 = N/A 뺀 평가점수 합 ÷ N/A 뺀 배점 합 × 100</td><td class="wrap">90 이상 우수 · 80 이상 양호 · 70 이상 개선 필요 · 70 미만 전면 개선 필요</td></tr>
+    </tbody>
+  </table></div>
+  <p class="sub" style="margin-top:10px">미입력 항목은 엑셀 양식과 같이 0 점으로 더하고 「미입력 n개」로 알려 줍니다. 원점수와 백분율을 함께 보여 줍니다 — 종류마다 배점이 달라 비교는 백분율로 합니다.</p>
+  <h3>Level 평가 Guide (대형 제관)</h3>
+  <p>3 = 발생빈도 0 · 2 = 1~20% · 1 = 21~40% · 0 = 41% 이상. 발견한 문제는 <b>원인 항목 하나에만</b> 평가합니다.</p>
+</div>
+<div class="card">
+  <h2 style="margin-top:0">4. 회사 양식 엑셀 올리기</h2>
+  <p>데이터 관리 → 종류마다 <b>엑셀 고르기</b>. 머리글 낱말(예: 점검내용 · 배점 · 가중치, 점검 항목 · 배점 · 점수배분, 양호 · 개선요 · 미실시)로 표를 찾고,
+  항목 · 배점 · 가중치 · CTQ · 선택지를 읽습니다. 공정 이름이 묶음 첫 행에만 있으면 아래 행이 물려받습니다. 합계(TOTAL) 줄에서 멈춥니다.</p>
+  <p>열을 잘못 찾았으면 미리보기에서 머리글 줄과 열을 직접 고르세요. 저장하면 <b>새 Audit 부터</b> 그 양식을 씁니다. 지난 Audit 는 그때 양식 그대로 점수를 계산합니다.</p>
+  <p class="sub">엑셀 파일은 브라우저 안에서만 읽습니다. 항목 정의만 이 PC 에 저장됩니다.</p>
+</div>
+<div class="card">
+  <h2 style="margin-top:0">5. 지적사항 · 개선조치</h2>
+  <p>Audit 입력 표의 <b>지적 등록</b>을 누르면 그 항목으로 지적사항이 만들어집니다. 결과는 날짜 칸으로 정해집니다.</p>
+  <ul style="margin-left:20px">
+    <li>계획일정이 없으면 <b>계획 미수립</b>(미착수)</li>
+    <li>계획일정만 있으면 <b>개선 진행중</b></li>
+    <li>완료일정이 있으면 <b>개선 완료</b></li>
+    <li>품질 담당자 확인일이 있으면 <b>확인 완료</b></li>
+  </ul>
+  <p>계획일정(없으면 완료 요청일)이 지났는데 끝나지 않았으면 <b>기한 초과</b>로 표시합니다. 같은 업체 · 같은 원인 항목이 전에 지적됐으면 <b>재발</b>로 제안합니다.</p>
+</div>
+<div class="card">
+  <h2 style="margin-top:0">6. 공정점검과 메일</h2>
+  <p>공정점검은 엑셀처럼 가로로 적습니다. 문제점과 개선 요청사항이 나란히 있고, 각각 사진을 여러 장 붙이고 설명을 적을 수 있습니다. 사진은 긴 변 1280px 로 줄여 저장합니다.</p>
+  <p>메일은 <b>파트장·팀장 보고용</b>과 <b>협력업체 발송용</b> 두 가지입니다. 점검에 적힌 내용만 쓰고, 비어 있는 정보는 「(입력 없음)」으로 두고 알려 줍니다.
+  제목·본문은 고칠 수 있고, 복사하거나 메일 프로그램으로 열 수 있습니다. 사진은 직접 첨부하세요.</p>
+  <p>AI 문장 다듬기는 선택입니다. 키는 이 브라우저에만 저장되고, 보내기 전에 사내 자료를 외부로 보내도 되는지 묻습니다. 결과는 「AI 초안 — 검토 필요」로 따로 보여 줍니다.</p>
+</div>
+<div class="card">
+  <h2 style="margin-top:0">7. 저장 · 백업 · 이번 판에서 하지 않는 것</h2>
+  <p>이 PC 의 한 브라우저에 저장하는 시제품입니다. 브라우저 데이터를 지우면 함께 사라지니 <b>전체 백업(JSON)</b>을 주기적으로 받아 두세요. 엑셀 내보내기는 지금 선택 조건의 업체만 담습니다.</p>
+  <ul style="margin-left:20px">
+    <li>여러 담당자가 같은 자료를 동시에 쓰는 것 — 별도 서버와 데이터베이스가 필요합니다.</li>
+    <li>사내 시스템 연동, 로그인 · 권한 관리.</li>
+    <li>메일 직접 발송과 사진 자동 첨부 — 메일 프로그램에서 보내고 사진은 직접 붙입니다.</li>
+  </ul>
+</div>
+</div></main>
+<footer><div class="wrap">생성형 AI 업무자동화 전문가과정 2차수 · 프로젝트 14 · 기획 정유석</div></footer>
+</body>
+</html>

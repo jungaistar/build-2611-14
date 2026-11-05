@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>협력업체 통합 품질관리 — Audit 4종 · 개선조치 · 공정점검 · 메일 초안</title>
+<meta name="description" content="협력업체 Audit 4종(Process · 대형 제관 · PSO · 도장)의 점수와 판정, 지적사항 개선조치, 업체별 점수 변화, 가로형 공정점검(사진 첨부), 내부 보고·업체 발송 메일 초안을 한 화면에서 관리합니다. 회사 양식 엑셀을 올리면 항목과 배점을 그대로 읽어 씁니다.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://build-2611-14.jobability.co.kr/">
+<meta name="robots" content="index,follow">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="생성형 AI 업무자동화 전문가과정 · 2차수">
+<meta property="og:url" content="https://build-2611-14.jobability.co.kr/">
+<meta property="og:title" content="협력업체 통합 품질관리 — 생성형 AI 업무자동화 전문가과정 2차수">
+<meta property="og:description" content="Audit 4종 점수·판정, 개선조치 추적, 업체별 점수 분석, 가로형 공정점검과 메일 초안을 한 곳에서 관리합니다.">
+<meta property="og:image" content="https://build-2611-14.jobability.co.kr/og-index.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<nav class="topnav" aria-label="주요 메뉴">
+  <div class="topnav-inner">
+    <a class="topnav-brand" href="index.html">협력업체 통합 품질관리 <small>build-2611-14 · 기획 정유석</small></a>
+    <ul class="topnav-links">
+      <li><a href="#/dashboard">Dashboard</a></li>
+      <li><a href="#/inspect">공정점검</a></li>
+      <li><a href="#/mail">메일</a></li>
+      <li><a href="guide.html">사용법</a></li>
+      <li><a href="plan.html">기획서</a></li>
+    </ul>
+  </div>
+</nav>
+
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">생성형 AI 업무자동화 전문가과정 · 2차수 · 프로젝트 14</div>
+  <h1>협력업체 통합 품질관리</h1>
+  <p>Audit 4종의 <b>점수와 판정</b>, 지적사항의 <b>개선조치 추적</b>, 업체별 <b>점수 변화</b>, 가로형 <b>공정점검</b>과 <b>메일 초안</b>을 한 화면에서 관리합니다.
+     회사 양식 엑셀을 올리면 항목과 배점을 그대로 읽어 씁니다.</p>
+</div></header>
+
+<main><div class="wrap">
+  <div class="app">
+    <aside class="side" aria-label="업무 메뉴">
+      <ul id="side">
+        <li><a href="#/dashboard" data-r="dashboard">Dashboard</a></li>
+        <li><a href="#/vendors" data-r="vendors">협력업체 관리</a></li>
+        <li class="grp">Audit 관리</li>
+        <li><a href="#/audit/C" data-r="audit/C" class="sub">Process Audit</a></li>
+        <li><a href="#/audit/A" data-r="audit/A" class="sub">대형 제관 Audit</a></li>
+        <li><a href="#/audit/B" data-r="audit/B" class="sub">PSO</a></li>
+        <li><a href="#/audit/D" data-r="audit/D" class="sub">도장 Audit</a></li>
+        <li><a href="#/findings" data-r="findings">개선조치 관리</a></li>
+        <li><a href="#/analysis" data-r="analysis">Audit 점수 분석</a></li>
+        <li><a href="#/inspect" data-r="inspect">공정점검 관리</a></li>
+        <li><a href="#/mail" data-r="mail">메일 자동 생성</a></li>
+        <li><a href="#/data" data-r="data">데이터 관리</a></li>
+      </ul>
+      <p class="side-note">저장 위치: 이 PC 의 브라우저(IndexedDB).<br>파일과 사진은 서버로 올라가지 않습니다.</p>
+    </aside>
+    <section class="panel">
+      <div class="selbar" id="selbar">
+        <label>담당자 <select id="sel-manager"></select></label>
+        <label>업체 <select id="sel-vendor"></select></label>
+        <span class="mode" id="sel-mode"></span>
+        <button class="btn sm" id="sel-clear" type="button">선택 해제</button>
+        <span class="saved" id="saved"></span>
+      </div>
+      <div id="view" aria-live="polite"></div>
+    </section>
+  </div>
+</div></main>
+
+<footer><div class="wrap">
+  생성형 AI 업무자동화 전문가과정 2차수 · 프로젝트 14 · 기획 정유석 ·
+  예제 데이터와 예제 양식은 실제 사내 데이터·양식이 아닙니다.
+</div></footer>
+
+<script src="lib/xlsx.full.min.js"></script>
+<script src="js/audit.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
