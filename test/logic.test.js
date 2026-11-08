@@ -193,5 +193,76 @@ eq([bk.ok, bk.db.audits.length, bk.photos.length], [true, db.audits.length, S.ph
 eq(QA.restore('{"schema":"other","db":{}}').ok, false, '다른 도구의 JSON 은 복원하지 않는다');
 eq(QA.restore('not json').ok, false, 'JSON 이 아니면 복원하지 않는다');
 
+/* ---------- 엑셀에서 복사해 붙여넣기 · CSV · TXT (회사 노트북 DRM · 폐쇄망, v1.1) ---------- */
+var TAB = '\t', NL = '\r\n';
+// 엑셀 범위 복사는 탭 · CRLF, 줄바꿈이 든 칸은 따옴표로 감싸고 맨 끝에 줄바꿈 하나가 붙는다
+var pt = QA.parsePaste(['제목 줄', '', 'No' + TAB + '구분' + TAB + '점검 항목' + TAB + '배점', '1' + TAB + '전처리' + TAB + '"표면\n상태"' + TAB + '3', '2' + TAB + '' + TAB + '도료 "A" 관리' + TAB + '1,234', '', ''].join(NL) + NL);
+eq(pt.delim, 'tab', '붙여넣기: 탭이 있으면 탭으로 나눈다(엑셀 복사)');
+eq(pt.aoa[3][2], '표면\n상태', '붙여넣기: 따옴표로 감싼 칸 안의 줄바꿈은 칸의 일부');
+eq(pt.aoa[4][2], '도료 "A" 관리', '붙여넣기: 감싸지 않은 칸의 따옴표는 그대로');
+eq([pt.rows, pt.cols], [5, 4], '붙여넣기: 끝의 빈 줄은 버리고 가운데 빈 줄은 남긴다');
+eq(pt.aoa[1], ['', '', '', ''], '붙여넣기: 모든 줄의 칸 수를 맞춘다');
+eq(QA.num(pt.aoa[4][3]), 1234, '붙여넣기: 천 단위 쉼표 숫자 1,234 → 1234 (탭 구분이라 칸이 갈리지 않는다)');
+var pq = QA.parsePaste('a,b,c\n"1,234","x ""y""",3\n');
+eq([pq.delim, pq.aoa[1]], ['comma', ['1,234', 'x "y"', '3']], 'CSV: 쉼표 구분 · 따옴표 칸 · "" → "');
+eq(QA.parsePaste('a,b\tc\n', { delim: '\t' }).aoa[0], ['a,b', 'c'], '구분 글자를 정해 주면 그대로 쓴다(.tsv)');
+eq(QA.parsePaste('﻿  가 \t 나 \n').aoa[0], ['가', '나'], '붙여넣기: BOM · 칸 앞뒤 공백 · 줄바꿈 없는 공백을 걷는다');
+eq(QA.parsePaste('').aoa, [], '빈 붙여넣기 → 빈 표');
+var rtA = [['번호', '내용', '비고'], ['1', '줄\n바꿈', 'tab\tin'], ['2', '따옴표 "q"', '']];
+eq(QA.parsePaste(QA.toTSV(rtA)).aoa, rtA, 'toTSV → parsePaste 왕복(줄바꿈 · 탭 · 따옴표 칸)');
+ok(/^﻿/.test(QA.toCSV([['가']])) && QA.parsePaste(QA.toCSV([['1,5', '나']])).aoa[0].join('|') === '1,5|나', 'toCSV: BOM + 쉼표 칸은 따옴표 · 다시 읽으면 같다');
+// 글자 파일 인코딩: 한국어 윈도 엑셀의 「CSV(쉼표로 분리)」는 CP949
+eq(QA.decodeText(Buffer.from([0xB9, 0xF8, 0xC8, 0xA3, 0x2C, 0xB9, 0xE8, 0xC1, 0xA1])), '번호,배점', 'CSV 인코딩: CP949(euc-kr) 바이트를 한글로 읽는다');
+eq(QA.decodeText(Buffer.concat([Buffer.from([0xEF, 0xBB, 0xBF]), Buffer.from('번호,배점', 'utf8')])), '번호,배점', 'CSV 인코딩: UTF-8 BOM');
+eq(QA.decodeText(Buffer.from('점검 항목', 'utf8')), '점검 항목', 'CSV 인코딩: BOM 없는 UTF-8');
+
+// 붙여넣기 → 양식 읽기 = 파일 읽기와 같은 결과 (예제 양식 4종 전부)
+['A', 'C', 'D'].forEach(function (k) {
+  var book = QA.sampleFormBook(k);
+  var fileRes = QA.parseFormBook(k, book.sheets, book.names), sh = fileRes.sheet;   // 양식 시트를 골라 복사한 경우
+  var pb = QA.pasteBook(k, QA.toTSV(book.sheets[sh]));
+  var pasteRes = QA.parseFormBook(k, pb.sheets, pb.names);
+  ok(pasteRes.ok && JSON.stringify(pasteRes.items) === JSON.stringify(fileRes.items), k + ' 양식: 엑셀 범위를 붙여 넣으면 파일과 같은 항목 · 배점 · 공정 묶음(' + (fileRes.items || []).length + '개)', pasteRes.error);
+  eq(pasteRes.headerRow, fileRes.headerRow, k + ' 양식: 위쪽 제목 줄이 섞여도 같은 머리글 줄을 찾는다');
+});
+var bookB = QA.sampleFormBook('B'), fileB = QA.parseFormBook('B', bookB.sheets, bookB.names);
+var pB = QA.pasteBook('B', QA.toTSV(bookB.sheets['Pre-PSO(기본)']), null, 'preBasic');
+pB = QA.pasteBook('B', QA.toTSV(bookB.sheets['Pre-PSO(상세)']), pB, 'preDetail');
+pB = QA.pasteBook('B', QA.toTSV(bookB.sheets['PSO(기본)']), pB, 'psoBasic');
+var rB = QA.parseFormBook('B', pB.sheets, pB.names);
+ok(rB.ok && JSON.stringify([rB.preBasic, rB.preDetail, rB.psoBasic]) === JSON.stringify([fileB.preBasic, fileB.preDetail, fileB.psoBasic]), 'PSO: 부분 3개를 차례로 붙여 넣으면 파일과 같은 Pre-PSO 기본 · 상세 · PSO 기본', rB.error);
+var pB2 = QA.pasteBook('B', QA.toTSV(bookB.sheets['PSO(기본)']), pB, 'psoBasic');
+eq(pB2.names.length, 3, 'PSO: 같은 부분을 다시 붙이면 바꿔 쓴다(쌓이지 않는다)');
+// 쉼표 숫자 · 빈 줄 · 합계 줄 — 파일 읽기 규칙 그대로
+var tsvC = ['Process Audit', 'No' + TAB + '공정' + TAB + '점검 내용' + TAB + '점수' + TAB + '가중치', '1' + TAB + '절단' + TAB + '절단면 확인' + TAB + '' + TAB + '2',
+  '', '2' + TAB + '' + TAB + '치수 확인' + TAB + '' + TAB + '1', '', '', '1,001' + TAB + '용접' + TAB + '비드 확인' + TAB + '' + TAB + ' 2 ', '합계' + TAB + '' + TAB + '' + TAB + '' + TAB + '10', '9' + TAB + 'x' + TAB + '합계 뒤' + TAB + '' + TAB + '1'].join(NL);
+var rC = QA.parseFormBook('C', QA.pasteBook('C', tsvC).sheets, ['붙여넣기']);
+eq(rC.items.map(function (it) { return [it.no, it.process, it.weight]; }), [['1', '절단', 2], ['2', '절단', 1], ['1001', '용접', 2]], 'C 붙여넣기: 빈 줄 2개는 건너뛰고 · 공정은 물려받고 · 1,001 → 1001 · 합계 줄에서 멈춘다');
+var rC3 = QA.parseFormBook('C', QA.pasteBook('C', ['No\t공정\t점검 내용\t점수\t가중치', '1\tP\ta\t\t1', '', '', '', '2\tP\tb\t\t1'].join('\n')).sheets, ['붙여넣기']);
+eq(rC3.items.length, 1, '붙여넣기: 빈 줄 3개에서 멈춘다(파일 읽기와 같음)');
+eq(QA.parseFormBook('D', QA.pasteBook('D', '아무 글자\t아무 칸\n1\t2').sheets, ['붙여넣기']).ok, false, '머리글이 없는 붙여넣기는 읽지 않고 필요한 열을 알린다');
+
+// 날짜
+eq(['2026-11-04', '2026.11.04', '2026. 11. 4.', '2026/11/4', '2026년 11월 4일', '2026년11월4일', '26.11.04', '20261104', '2026-11-04 09:30', '2026-11-04 오후 3:05', '2026.11.04(수)', 46330, '46330']
+  .map(function (v) { return QA.normDate(v); }), Array(13).join('2026-11-04,').split(',').slice(0, 12).concat(['2026-11-04']), '날짜: 하이픈 · 점 · 빗금 · 한글 · 두 자리 연도 · 8자리 · 시각 · 요일 · 엑셀 일련번호');
+eq([QA.normDate('11/4', { year: 2026 }), QA.normDate('11월 4일', { year: '2026' }), QA.normDate('11/4')], ['2026-11-04', '2026-11-04', null], '날짜: 연도 없는 날은 점검 연도가 있을 때만');
+eq([QA.normDate('2026-02-30'), QA.normDate('2026-13-01'), QA.normDate('다음 주'), QA.normDate(''), QA.normDate(null), QA.normDate(5)], [null, null, null, '', '', null], '날짜: 없는 날 · 글자는 null, 빈 칸은 빈 값');
+
+// 공정점검 행 붙여넣기
+var tsvI = ['공정점검 결과', 'No.\t점검 공정\t점검 항목\t확인 내용\t문제점\t문제점 사진\t개선 요청사항\t개선 사진\t담당자\t완료 예정일\t진행상태',
+  '1\t용접\t용접 조건\t전류 측정\t조건표와 다름\t(사진)\t조건 맞추기\t\t업체 생산\t2026. 11. 20.\t조치중',
+  '2\t\t\t\t\t\t\t\t\t\t', '3\t검사\t기록\t"기록지\n확인"\t\t\t\t\t\t11/30\t완료', '4\t도장\t두께\t측정\t얇음\t\t재도장\t\t\t다음 주\t보류'].join(NL);
+var ri = QA.parseInspectRows(QA.parsePaste(tsvI).aoa, { year: 2026 });
+eq(ri.rows.map(function (r) { return [r.process, r.item, r.problem, r.request, r.due, r.state]; }),
+  [['용접', '용접 조건', '조건표와 다름', '조건 맞추기', '2026-11-20', '조치 중'], ['검사', '기록', '', '', '2026-11-30', '완료'], ['도장', '두께', '얇음', '재도장', '', '요청']], '공정점검 붙여넣기: 한글 머리글로 열 찾기 · 번호만 있는 줄 건너뛰기 · 날짜 · 상태 맞추기');
+eq(ri.rows[1].check, '기록지\n확인', '공정점검 붙여넣기: 줄바꿈 든 칸');
+eq(ri.headerRow, 1, '공정점검 붙여넣기: 제목 줄 아래 머리글을 찾는다');
+ok(ri.warnings.length === 2 && /다음 주/.test(ri.warnings[0]) && /보류/.test(ri.warnings[1]), '공정점검 붙여넣기: 못 읽은 날짜 · 상태는 경고(지어내지 않음)', JSON.stringify(ri.warnings));
+ok(ri.rows.every(function (r) { return Array.isArray(r.problemPhotos) && Array.isArray(r.fixPhotos); }), '공정점검 붙여넣기: 사진 칸은 빈 목록');
+var rn = QA.parseInspectRows(QA.parsePaste('1\t절단\t치수\t측정\t초과\t재측정\t홍길동\t2026-12-01\t완료\n2\t용접\t비드\t육안\t\t\t\t\t').aoa);
+eq(rn.rows.map(function (r) { return [r.process, r.problem, r.owner, r.due, r.state]; }), [['절단', '초과', '홍길동', '2026-12-01', '완료'], ['용접', '', '', '', '요청']], '공정점검 붙여넣기: 머리글이 없으면 화면 열 순서(앞의 번호 열은 건너뜀)');
+ok(/머리글 줄이 없어/.test(rn.warnings[0]), '공정점검 붙여넣기: 머리글 없이 읽었다고 알린다');
+eq(QA.parseInspectRows([]).ok, false, '공정점검 붙여넣기: 빈 표는 읽지 않는다');
+
 console.log('\n규칙 통과 ' + passed + ' · 실패 ' + failed);
 process.exit(failed ? 1 : 0);

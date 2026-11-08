@@ -6,6 +6,7 @@ var chromium;
 try { chromium = require('playwright').chromium; }
 catch (e) { console.log('playwright 가 없어 화면 연기 테스트를 건너뜁니다.'); process.exit(0); }
 var XLSX = require('../lib/xlsx.full.min.js');
+var QA = require('../js/audit.js');
 var ROOT = path.join(__dirname, '..');
 var MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.xlsx': 'application/octet-stream' };
 var srv = http.createServer(function (q, s) {
@@ -21,6 +22,7 @@ var PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEklEQVR4n
 srv.listen(0, async function () {
   var base = 'http://127.0.0.1:' + srv.address().port + '/';
   var br = await chromium.launch(); var ctx = await br.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+  await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base.replace(/\/$/, '') });
   var pg = await ctx.newPage();
   var errs = []; pg.on('pageerror', function (e) { errs.push(e.message); });
   pg.on('dialog', function (d) { d.accept(); });
@@ -103,6 +105,13 @@ srv.listen(0, async function () {
     await pg.fill('#insp-table tbody tr:nth-child(3) textarea[data-k="request"]', '서명란을 채워 주세요');
     await pg.click('#btn-add-row');
     ok(await count(pg, '#insp-table tbody tr') === 4, '행 추가');
+    // 엑셀에서 복사해 붙여넣기(DRM 노트북) — 머리글 · 날짜 · 상태를 읽어 빈 행은 정리하고 덧붙인다
+    await pg.click('#btn-insp-paste'); await pg.waitForSelector('#insp-paste-text');
+    await pg.fill('#insp-paste-text', ['No.\t점검 공정\t점검 항목\t확인 내용\t문제점\t개선 요청사항\t담당자\t완료 예정일\t진행상태', '1\t절단\t치수\t측정\t길이 초과\t재측정\t업체 품질\t2026. 12. 5.\t조치중', '2\t도장\t두께\t측정\t\t\t\t12/9\t완료'].join('\n'));
+    await pg.click('#btn-insp-paste-read'); await pg.waitForSelector('#insp-paste-msg');
+    ok(await count(pg, '#insp-table tbody tr') === 5 && /2개를 넣었습니다/.test(await text(pg, '#insp-paste-msg')), '공정점검 붙여넣기: 빈 행 정리 + 2행 추가', await count(pg, '#insp-table tbody tr'));
+    ok(await pg.inputValue('#insp-table tbody tr:nth-child(4) input[data-k="due"]') === '2026-12-05' && await pg.inputValue('#insp-table tbody tr:nth-child(4) select[data-k="state"]') === '조치 중', '공정점검 붙여넣기: 「2026. 12. 5.」 → 날짜 칸 · 「조치중」 → 조치 중');
+    ok(/^\d{4}-12-09$/.test(await pg.inputValue('#insp-table tbody tr:nth-child(5) input[data-k="due"]')), '공정점검 붙여넣기: 연도 없는 12/9 는 점검 연도로');
     await pg.click('#btn-save-insp');
     // 메일 2종
     await pg.click('#btn-to-mail'); await pg.waitForSelector('#mail-body');
@@ -125,6 +134,38 @@ srv.listen(0, async function () {
     await pg.click('#btn-form-save');
     await pg.waitForFunction(function () { return /올린 양식/.test(document.getElementById('form-table').textContent); });
     ok(true, '올린 양식을 저장하고 쓰는 양식으로');
+    // 엑셀 파일을 고를 수 없을 때 — 범위를 복사해 붙여넣기(파일과 같은 읽기)
+    var bookA = QA.sampleFormBook('A'), shA = QA.parseFormBook('A', bookA.sheets, bookA.names).sheet;
+    await pg.click('#btn-paste-A'); await pg.waitForSelector('#paste-text');
+    await pg.fill('#paste-text', QA.toTSV(bookA.sheets[shA]));
+    await pg.click('#btn-paste-read'); await pg.waitForSelector('#fp-ok');
+    ok(/항목 14개/.test(await text(pg, '#fp-ok')) && /만점 60/.test(await text(pg, '#fp-ok')), '대형 제관 양식 붙여넣기 → 항목 14개 · 만점 60(파일과 같음)', await text(pg, '#fp-ok'));
+    ok(await pg.$eval('#form-preview select[data-act="fp-map"][data-f="weight"]', function (e) { return e.value !== ''; }), '붙여넣은 표도 열 직접 고르기 화면이 뜬다');
+    await pg.click('#form-preview button[data-act="fp-cancel"]');
+    var bookB = QA.sampleFormBook('B');
+    await pg.click('#btn-paste-B'); await pg.waitForSelector('#paste-part');
+    for (var part of [['preBasic', 'Pre-PSO(기본)'], ['preDetail', 'Pre-PSO(상세)'], ['psoBasic', 'PSO(기본)']]) {
+      await pg.selectOption('#paste-part', part[0]); await pg.fill('#paste-text', QA.toTSV(bookB.sheets[part[1]])); await pg.click('#btn-paste-read'); await pg.waitForSelector('#fp-ok');
+    }
+    var fb = QA.parseFormBook('B', bookB.sheets, bookB.names), nB = fb.preBasic.length + fb.preDetail.length + fb.psoBasic.length;
+    ok(new RegExp('항목 ' + nB + '개').test(await text(pg, '#fp-ok')) && !/시트가 없습니다/.test(await text(pg, '#form-preview')), 'PSO 붙여넣기 3부분 → 파일과 같은 ' + nB + '항목', await text(pg, '#form-preview'));
+    await pg.click('#form-preview button[data-act="fp-cancel"]');
+    await pg.setInputFiles('#form-file-D', { name: '도장양식.csv', mimeType: 'text/csv', buffer: Buffer.from(QA.toCSV(QA.sampleFormBook('D').sheets[QA.sampleFormBook('D').names[0]]), 'utf8') });
+    await pg.waitForSelector('#fp-ok');
+    ok(/항목 10개/.test(await text(pg, '#fp-ok')) && /만점 22/.test(await text(pg, '#fp-ok')), 'CSV 파일도 고를 수 있다 → 항목 10개 · 만점 22');
+    await pg.click('#form-preview button[data-act="fp-cancel"]');
+    // 결과 표 복사(엑셀 파일을 못 열 때)
+    await pg.click('#copy-tables button[data-sheet="Audit결과"]');
+    await pg.waitForFunction(function () { return /복사했습니다/.test(document.body.textContent); });
+    var clip = await pg.evaluate(function () { return navigator.clipboard.readText(); });
+    var ca = QA.parsePaste(clip).aoa;
+    ok(QA.parsePaste(clip).delim === 'tab' && ca[0].length === 13 && ca[0][0] === '업체' && ca.length - 1 === 7 && /A정밀/.test(ca[1][0]), 'Audit결과 표 복사 → 엑셀에 붙일 탭 글자(선택 업체 7행)', ca.length);
+    var dcsv = await Promise.all([pg.waitForEvent('download'), pg.click('#btn-csv')]);
+    ok(/Audit결과\.csv$/.test(dcsv[0].suggestedFilename()), 'CSV 로 받기', dcsv[0].suggestedFilename());
+    // 오프라인 사용 파일 받기
+    var dof = await Promise.all([pg.waitForEvent('download'), pg.click('#btn-offline')]);
+    var of = path.join(tmp, 'off.html'); await dof[0].saveAs(of);
+    ok(fs.readFileSync(of, 'utf8') === fs.readFileSync(path.join(ROOT, 'offline', 'qa-2611-14-offline.html'), 'utf8') && /오프라인/.test(dof[0].suggestedFilename()), '「오프라인 사용 파일 받기」 → HTML 하나', dof[0].suggestedFilename());
     // 엑셀 · 백업
     var dx = await Promise.all([pg.waitForEvent('download'), pg.click('#btn-export')]);
     var xf = path.join(tmp, 'out.xlsx'); await dx[0].saveAs(xf);
@@ -157,6 +198,33 @@ srv.listen(0, async function () {
     ok(/Level/.test(await text(pg, 'main')) && /서버/.test(await text(pg, 'main')), '사용법 페이지');
   } catch (e) { failed++; console.log('  X 예외: ' + e.message); }
   ok(!errs.length, '페이지 오류 없음', errs.join(' | '));
+  // 폐쇄망: 인터넷을 끊은 브라우저에서 오프라인 파일을 file:// 로 연다. 바깥 요청이 하나라도 나가면 실패.
+  try {
+    var octx = await br.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true, offline: true });
+    var reqs = [], oerrs = [];
+    await octx.route('**/*', function (r) { var u = r.request().url(); if (/^(file|data|blob):/.test(u)) return r.continue(); reqs.push(u); return r.abort(); });
+    var op = await octx.newPage();
+    op.on('request', function (q) { if (!/^(file|data|blob):/.test(q.url())) reqs.push(q.url()); });
+    op.on('pageerror', function (e) { oerrs.push(e.message); }); op.on('dialog', function (d) { d.accept(); });
+    await op.goto('file://' + path.join(ROOT, 'offline', 'qa-2611-14-offline.html'));
+    await op.waitForSelector('body[data-ready="1"]');
+    ok(/오프라인 파일 v/.test(await op.textContent('.eyebrow')), '오프라인 파일: file:// 로 열린다(인터넷 끊김)');
+    await op.click('#btn-sample'); await op.waitForSelector('#kpi');
+    ok(await op.$$eval('#kpi .stat', function (t) { return t.length; }) === 6, '오프라인 파일: 예제 → 대시보드 KPI 6개');
+    await op.goto('file://' + path.join(ROOT, 'offline', 'qa-2611-14-offline.html') + '#/data'); await op.waitForSelector('#form-table');
+    ok(/오프라인 파일로 쓰는 중/.test(await op.textContent('#offline-card')) && await op.$$eval('#btn-offline', function (t) { return t.length; }) === 0, '오프라인 파일: 「받기」 대신 오프라인 안내');
+    ok(/4곳/.test(await op.textContent('#view')), '오프라인 파일: 다시 열어도 자료가 남는다(브라우저 저장소)');
+    await op.click('#btn-paste-D'); await op.fill('#paste-text', QA.toTSV(QA.sampleFormBook('D').sheets[QA.sampleFormBook('D').names[0]])); await op.click('#btn-paste-read'); await op.waitForSelector('#fp-ok');
+    ok(/항목 10개/.test(await op.textContent('#fp-ok')), '오프라인 파일: 양식 붙여넣기');
+    await op.setInputFiles('#form-file-C', path.join(ROOT, 'samples', 'form-C-process-audit.xlsx')); await op.waitForSelector('#fp-ok');
+    ok(/항목 12개/.test(await op.textContent('#fp-ok')), '오프라인 파일: 엑셀 파일 읽기(SheetJS 동봉)', await op.textContent('#fp-ok'));
+    var ox = await Promise.all([op.waitForEvent('download'), op.click('#btn-export')]);
+    var oxf = path.join(tmp, 'off.xlsx'); await ox[0].saveAs(oxf);
+    ok(XLSX.read(fs.readFileSync(oxf), { type: 'buffer' }).SheetNames.length === 5, '오프라인 파일: 엑셀 5시트 내보내기');
+    ok(!reqs.length, '오프라인 파일: 바깥 요청 0건', reqs.join(' | '));
+    ok(!oerrs.length, '오프라인 파일: 페이지 오류 없음', oerrs.join(' | '));
+    await octx.close();
+  } catch (e) { failed++; console.log('  X 오프라인 예외: ' + e.message); }
   await br.close(); srv.close();
   console.log('\n화면 통과 ' + passed + ' · 실패 ' + failed);
   process.exit(failed ? 1 : 0);

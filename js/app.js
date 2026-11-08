@@ -72,6 +72,17 @@
   }
   function sampleNote() { return S.db.sample ? '<p class="sub">예제 데이터는 실제 사내 데이터가 아닙니다 — 지어낸 담당자 2명 · 업체 4곳 · Audit 이력입니다.</p>' : ''; }
   function download(name, blob) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
+  // 클립보드에 글자 넣기. 클립보드 API 가 막혀 있으면(오래된 브라우저 · 사내 정책) 숨긴 글상자를 골라 복사한다.
+  function copyText(text, done) {
+    function legacy() {
+      var ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.left = '-9999px';
+      document.body.appendChild(ta); ta.select(); var okc = false; try { okc = document.execCommand('copy'); } catch (e) { okc = false; } ta.remove();
+      done(okc);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done(true); }, legacy);
+    else legacy();
+  }
+  var OFFLINE = !!window.QA_OFFLINE;
 
   /* ---------- 그래프(SVG 직접) ---------- */
   function lineChart(series, o) {
@@ -128,7 +139,7 @@
     if (S.sel.vendorId && !S.sel.managerId) { var vv = vendor(S.sel.vendorId); if (vv) S.sel.managerId = vv.managerId || ''; }
     if (S.sel.vendorId && scope().mode !== 'vendor') S.sel.vendorId = '';
     try { localStorage.setItem('qa14.sel', JSON.stringify(S.sel)); } catch (e) { /* 저장 못 해도 화면은 돈다 */ }
-    S.edit = null; S.inspEdit = null; S.findEdit = null; S.mail = null;
+    S.edit = null; S.inspEdit = null; S.findEdit = null; S.mail = null; S.inspPaste = false; S.inspPasteMsg = null;
     renderSel(); render();
   }
 
@@ -456,6 +467,7 @@
     return h;
   }
   function newInsp() {
+    S.inspPaste = false; S.inspPasteMsg = null;
     var v = scope().vendor;
     S.inspEdit = { id: QA.uid('i'), vendorId: v.id, date: S.today, purpose: '', target: '', inspectorId: v.managerId || '', attendees: '', vendorPlan: '', overall: '', rows: [blankRow(), blankRow(), blankRow()], isNew: true };
   }
@@ -471,7 +483,10 @@
       x.rows.map(function (r, i) {
         return '<tr><td class="num">' + (i + 1) + '</td><td>' + c(i, 'process') + '</td><td>' + c(i, 'item') + '</td><td>' + c(i, 'check', 'ta') + '</td><td class="pair">' + c(i, 'problem', 'ta') + '</td><td class="pair">' + photoCell('ir', 'problemPhotos', r.problemPhotos, '', i) + '</td>' +
           '<td class="pair">' + c(i, 'request', 'ta') + '</td><td class="pair">' + photoCell('ir', 'fixPhotos', r.fixPhotos, '', i) + '</td><td>' + c(i, 'owner') + '</td><td>' + c(i, 'due', 'date') + '</td><td><select data-act="ir" data-i="' + i + '" data-k="state">' + opts(QA.INSPECT_STATES, r.state) + '</select></td><td><button class="btn xs danger" data-act="ir-del" data-i="' + i + '">행 삭제</button></td></tr>';
-      }).join('') + '</tbody></table></div><div class="btnrow tight" style="margin-top:8px"><button class="btn sm" id="btn-add-row" data-act="ir-add">행 추가</button></div>' +
+      }).join('') + '</tbody></table></div><div class="btnrow tight" style="margin-top:8px"><button class="btn sm" id="btn-add-row" data-act="ir-add">행 추가</button><button class="btn sm" id="btn-insp-paste" data-act="insp-paste-open">엑셀에서 복사해 붙여넣기</button></div>' +
+      (S.inspPasteMsg ? '<div class="' + (/넣었습니다/.test(S.inspPasteMsg[0]) ? 'ok' : 'warn') + '" id="insp-paste-msg">' + S.inspPasteMsg.map(esc).join('<br>') + '</div>' : '') +
+      (S.inspPaste ? '<div class="card inner" id="insp-paste"><h3>점검표를 엑셀에서 붙여넣기</h3><p class="sub">엑셀에 적어 둔 점검표를 머리글 줄과 함께 복사(Ctrl+C)해 붙여 넣으세요. 머리글(점검 공정 · 점검 항목 · 확인 내용 · 문제점 · 개선 요청사항 · 담당자 · 완료 예정일 · 진행상태)로 열을 찾습니다. 머리글이 없으면 이 순서대로 읽습니다. 날짜는 2026-11-04 · 2026.11.4 · 2026년 11월 4일 · 11/4 모두 됩니다. 사진은 붙여넣기로 옮겨지지 않으니 표에서 붙여 주세요.</p>' +
+        '<textarea id="insp-paste-text" class="paste" rows="6" placeholder="여기에 붙여 넣으세요 (Ctrl+V)"></textarea><div class="btnrow tight"><button class="btn primary" id="btn-insp-paste-read" data-act="insp-paste-read">행으로 넣기</button><button class="btn" data-act="insp-paste-open">닫기</button></div></div>' : '') +
       '<div class="form"><label class="full">업체 조치계획 <textarea data-act="ih" data-k="vendorPlan" rows="2">' + esc(x.vendorPlan) + '</textarea></label><label class="full">종합 의견 <textarea data-act="ih" data-k="overall" rows="2">' + esc(x.overall) + '</textarea></label></div>' +
       '<div class="btnrow"><button class="btn primary" id="btn-save-insp" data-act="save-insp">점검 결과 저장</button><button class="btn" id="btn-to-mail" data-act="insp-mail">이 점검으로 메일 만들기</button><button class="btn" data-act="insp-findings">문제점을 지적사항으로 등록</button><button class="btn" data-act="close-insp">닫기</button>' + (x.isNew ? '' : '<button class="btn danger" data-act="del-insp">삭제</button>') + '</div></div>';
   }
@@ -542,17 +557,24 @@
       QA.ORDER.map(function (k) {
         var list = S.db.forms.filter(function (f) { return f.kind === k; }), act = QA.activeForm(S.db, k);
         return '<tr><td><b>' + esc(K[k].name) + '</b></td><td><select data-act="form-active" data-kind="' + k + '">' + opts(list.map(function (f) { return { v: f.id, t: f.name }; }), act && act.id) + '</select></td><td class="num">' + QA.formSize(act) + '</td><td class="num">' + (k === 'B' ? '—' : QA.formMax(act)) + '</td><td class="wrap">' + esc(act.source) + '</td>' +
-          '<td><label class="btn sm" for="form-file-' + k + '">엑셀 고르기</label><input type="file" id="form-file-' + k + '" accept=".xlsx,.xls,.xlsm" data-act="form-file" data-kind="' + k + '"></td></tr>';
+          '<td><div class="btnrow tight"><label class="btn sm" for="form-file-' + k + '">파일 고르기</label><input type="file" id="form-file-' + k + '" accept=".xlsx,.xls,.xlsm,.csv,.tsv,.txt" data-act="form-file" data-kind="' + k + '">' +
+          '<button class="btn sm" id="btn-paste-' + k + '" data-act="paste-open" data-kind="' + k + '">엑셀에서 복사해 붙여넣기</button></div></td></tr>';
       }).join('') + '</tbody></table></div><p class="sub">예제 양식 엑셀 4종은 저장소의 <code>samples/</code> 폴더에 있습니다(실제 회사 양식과 같은 모양, 항목은 지어낸 것).</p>' +
-      '<div id="form-preview">' + formPreview() + '</div></div>';
+      '<div class="note">회사 노트북에서 엑셀 파일이 열리지 않으면(DRM · 보안 프로그램) 엑셀에서 <b>머리글 줄부터 표 끝까지 범위를 골라 복사(Ctrl+C)</b>한 뒤 「엑셀에서 복사해 붙여넣기」로 넣으세요. 파일과 같은 규칙으로 머리글 · 공정 묶음 · 배점을 읽습니다. CSV · TXT 파일도 고를 수 있습니다.</div>' +
+      pastePanel() + '<div id="form-preview">' + formPreview() + '</div></div>';
     var n = S.db;
     h += '<div class="card"><h2>내보내기 · 백업</h2><div class="stats">' + stat('업체', n.vendors.length + '곳') + stat('Audit', n.audits.length + '건') + stat('지적사항', n.findings.length + '건') + stat('공정점검', n.inspections.length + '건') + stat('사진', Object.keys(S.photos).length + '장') + stat('메일 이력', n.mails.length + '건') + '</div>' +
       '<div class="btnrow"><button class="btn green" id="btn-export" data-act="export">엑셀로 내보내기(현재 선택 조건)</button><button class="btn" id="btn-backup" data-act="backup">전체 백업(JSON · 사진 포함)</button><label class="btn" for="restore-file">백업 복원</label><input type="file" id="restore-file" accept=".json,application/json" data-act="restore"></div>' +
       '<p class="sub" style="margin-top:10px">엑셀 시트: Audit결과 · 항목별점수 · 지적사항 · 공정점검 · 메일이력. 백업 파일에는 사내 자료와 사진이 그대로 들어 있습니다 — 보관·전달에 주의하세요.</p>' +
+      '<h3>엑셀 파일을 받을 수 없을 때 — 표 복사</h3><p class="sub">내려받은 엑셀 파일이 열리지 않으면 표를 복사해 빈 엑셀 시트의 A1 칸에 붙여 넣으세요(Ctrl+V). 현재 선택 조건의 자료입니다.</p>' +
+      '<div class="btnrow tight" id="copy-tables">' + ['Audit결과', '항목별점수', '지적사항', '공정점검', '메일이력'].map(function (nm) { return '<button class="btn sm" data-act="copy-sheet" data-sheet="' + nm + '">' + nm + ' 복사</button>'; }).join('') +
+      '<button class="btn sm" data-act="csv-sheet" id="btn-csv">CSV 로 받기(시트 5개)</button></div>' +
+      '<h3>백업 파일을 고를 수 없을 때</h3><div class="btnrow tight"><button class="btn sm" data-act="restore-paste-open" id="btn-restore-paste">백업 내용 붙여넣어 복원</button></div>' + (S.restorePaste ? '<div class="form"><label class="full">백업 JSON 내용 <textarea id="restore-text" rows="4" placeholder="백업 파일을 메모장으로 열어 전체 선택(Ctrl+A) · 복사한 뒤 여기에 붙여 넣으세요"></textarea></label><button class="btn primary" data-act="restore-paste">이 내용으로 복원</button></div>' : '') +
       '<div class="btnrow"><button class="btn" data-act="sample">예제로 바꾸기</button><button class="btn danger" data-act="clear">모두 지우기</button></div>' +
       '<div class="note">이 도구는 <b>한 PC 의 한 브라우저</b>에 저장하는 시제품입니다. 브라우저 데이터를 지우면 함께 사라지니 백업 파일을 주기적으로 받아 두세요. 여러 담당자가 같은 자료를 함께 쓰려면 별도 서버와 데이터베이스가 필요합니다(자료 구조는 그대로 옮길 수 있게 만들었습니다).</div></div>';
+    h += offlineCard();
     var cfg = aiCfg();
-    h += '<div class="card"><h2>AI 문장 다듬기(선택)</h2><p class="sub">메일 초안은 AI 없이 만들어집니다. AI 는 문장을 다듬는 보조로만 씁니다. 키는 이 브라우저(localStorage)에만 저장되고, 보내기 전에 매번 확인을 묻습니다.</p>' +
+    h += '<div class="card"><h2>AI 문장 다듬기(선택)</h2><p class="sub">메일 초안은 AI 없이 만들어집니다. AI 는 문장을 다듬는 보조로만 씁니다(인터넷이 필요합니다 — 폐쇄망에서는 쓰지 않아도 모든 기능이 그대로 됩니다). 키는 이 브라우저(localStorage)에만 저장되고, 보내기 전에 매번 확인을 묻습니다.</p>' +
       '<div class="form"><label>제공자 <select id="ai-provider" data-act="ai-cfg">' + opts([{ v: 'openai', t: 'OpenAI (gpt-4o-mini)' }, { v: 'anthropic', t: 'Anthropic (claude-haiku-5-5)' }], cfg.provider || 'openai') + '</select></label><label class="span2">API 키 <input type="password" id="ai-key" data-act="ai-cfg" value="' + esc(cfg.key || '') + '" autocomplete="off"></label></div></div>';
     return h;
   }
@@ -584,12 +606,40 @@
     h += '<div class="form"><label class="span2">양식 이름 <input id="fp-name" value="' + esc(d.file.replace(/\.[^.]+$/, '')) + '"></label><button class="btn primary" id="btn-form-save" data-act="fp-save">이 양식 저장하고 쓰기</button><button class="btn" data-act="fp-cancel">취소</button></div>';
     return h;
   }
+  // 엑셀에서 복사해 붙여넣기 — DRM 때문에 .xlsx 를 고를 수 없을 때. 읽기는 파일과 같은 QA.parseFormBook.
+  function pastePanel() {
+    var k = S.pasteKind; if (!k) return '';
+    var d = S.formDraft && S.formDraft.pasted && S.formDraft.kind === k ? S.formDraft : null;
+    var h = '<div class="card inner" id="paste-panel"><h3>엑셀에서 복사해 붙여넣기 — ' + esc(K[k].name) + '</h3>' +
+      '<ol class="sub"><li>회사 양식 엑셀에서 <b>머리글 줄(예: ' + esc(QA.REQUIRED[k === 'B' ? 'Bb' : k].map(function (f) { return QA.FIELD_LABEL[f]; }).join(' · ')) + ')부터 마지막 항목까지</b> 골라 복사(Ctrl+C)합니다. 위쪽 제목 줄이 섞여도 됩니다.</li>' +
+      '<li>아래 칸을 누르고 붙여 넣기(Ctrl+V) → 「붙여넣은 표 읽기」.</li>' + (k === 'B' ? '<li>PSO 는 시트마다 따로 붙여 넣습니다 — 부분을 고르고 읽은 뒤, 다음 부분을 고르고 다시 붙여 넣으면 함께 쌓입니다.</li>' : '') + '</ol>' +
+      (k === 'B' ? '<div class="form"><label>부분 <select id="paste-part">' + opts([{ v: 'preBasic', t: 'Pre-PSO 기본(양호 · 개선요 · 미실시)' }, { v: 'preDetail', t: 'Pre-PSO 상세(점검항목 · 점검 Point)' }, { v: 'psoBasic', t: 'PSO 기본(양호 · 개선요 · 미실시)' }], S.pastePart || 'preBasic') + '</select></label>' +
+        (d ? '<p class="sub span2">지금까지 붙인 부분: ' + esc(d.names.join(' · ')) + '</p>' : '') + '</div>' : '') +
+      '<textarea id="paste-text" class="paste" rows="7" placeholder="여기에 엑셀 범위를 붙여 넣으세요 (Ctrl+V)"></textarea>' +
+      '<div class="btnrow tight"><button class="btn primary" id="btn-paste-read" data-act="paste-read" data-kind="' + k + '">붙여넣은 표 읽기</button><button class="btn" data-act="paste-close">닫기</button></div></div>';
+    return h;
+  }
+  function offlineCard() {
+    if (OFFLINE) {
+      return '<div class="card" id="offline-card"><h2>오프라인 파일로 쓰는 중</h2><p>이 화면은 내려받은 오프라인 파일(v' + esc(window.QA_OFFLINE.version) + ')입니다. 인터넷 없이 모든 기능이 됩니다 — 엑셀 읽기 · 내보내기 라이브러리까지 이 파일 하나에 들어 있습니다.</p>' +
+        '<p class="sub">자료는 이 PC 의 이 브라우저에 저장됩니다. 온라인 주소에서 쓰던 자료와는 저장소가 따로라, 옮길 때는 「전체 백업」 → 여기서 「백업 복원」을 쓰세요. 파일 위치를 옮겨도 같은 브라우저면 자료가 이어지지만, 브라우저 기록을 지우면 함께 지워지니 백업을 자주 받아 두세요.</p></div>';
+    }
+    return '<div class="card" id="offline-card"><h2>폐쇄망 · 회사 노트북에서 쓰기</h2><p>인터넷이 안 되는 PC 에서는 <b>오프라인 사용 파일</b>(HTML 하나)을 받아 USB 등으로 옮긴 뒤 두 번 눌러 여세요. 화면 · 계산 · 엑셀 읽기/내보내기 라이브러리가 모두 그 파일 안에 들어 있어 서버나 인터넷 없이 돕니다.</p>' +
+      '<div class="btnrow"><a class="btn primary" id="btn-offline" href="offline/qa-2611-14-offline.html" download="협력업체품질관리_오프라인.html">오프라인 사용 파일 받기</a></div>' +
+      '<p class="sub">자료는 그 PC 브라우저에 따로 저장됩니다. 지금 자료를 가져가려면 「전체 백업」 파일을 함께 옮겨 오프라인 파일에서 「백업 복원」하세요. 새 판이 나오면 파일을 다시 받으면 되고, 자료는 그대로 남습니다.</p></div>';
+  }
   function reparseDraft() {
     var d = S.formDraft;
     d.result = QA.parseFormBook(d.kind, d.sheets, d.names, d.opts);
   }
   function readXlsx(file) {
     return file.arrayBuffer().then(function (buf) {
+      var ext = (file.name.match(/\.([^.]+)$/) || ['', ''])[1].toLowerCase();
+      if (ext === 'csv' || ext === 'tsv' || ext === 'txt') {   // 글자 파일은 붙여넣기와 같은 읽기(인코딩은 UTF-8 · CP949 자동)
+        var pp = QA.parsePaste(QA.decodeText(new Uint8Array(buf)), ext === 'csv' ? { delim: ',' } : ext === 'tsv' ? { delim: '\t' } : {}), one = {};
+        one[file.name] = pp.aoa;
+        return { names: [file.name], sheets: one };
+      }
       var wb = XLSX.read(buf, { type: 'array' }), sheets = {};
       wb.SheetNames.forEach(function (n) { sheets[n] = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '', raw: true }); });
       return { names: wb.SheetNames, sheets: sheets };
@@ -601,6 +651,14 @@
     var sc = scope(), tag2 = sc.mode === 'vendor' ? sc.vendor.name : sc.mode === 'manager' ? mname(sc.managerId) : '전체';
     var out = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
     download('협력업체품질_' + tag2.replace(/[\\/:*?"<>|()\s]/g, '') + '_' + S.today + '.xlsx', new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  }
+
+  function restoreFrom(t) {
+    var r2 = QA.restore(t);
+    if (!r2.ok) { toast('복원 실패: ' + r2.error); return; }
+    if (!confirm('지금 자료를 백업 파일 내용으로 바꿉니다. 계속할까요?')) return;
+    S.restorePaste = false;
+    S.db = r2.db; clearPhotos().then(function () { return Promise.all(r2.photos.map(function (p) { return putPhoto(p.id, p.data); })); }).then(function () { save(); setSel('', ''); toast('복원했습니다'); });
   }
 
   /* ---------- 사진 ---------- */
@@ -669,11 +727,11 @@
     else if (act === 'ph-del') { photoTarget(el).splice(+el.getAttribute('data-j'), 1); render(); }
     else if (act === 'zoom') { var z = document.createElement('div'); z.className = 'zoom'; z.innerHTML = '<img src="' + esc(S.photos[id] || '') + '" alt="">'; z.onclick = function () { z.remove(); }; document.body.appendChild(z); }
     else if (act === 'new-insp') { newInsp(); render(); $('insp-edit').scrollIntoView({ block: 'start' }); }
-    else if (act === 'open-insp') { var x = S.db.inspections.filter(function (y) { return y.id === id; })[0]; S.inspEdit = JSON.parse(JSON.stringify(x)); if (S.route !== 'inspect') go('inspect'); else render(); setTimeout(function () { var ie = $('insp-edit'); if (ie) ie.scrollIntoView({ block: 'start' }); }, 30); }
+    else if (act === 'open-insp') { var x = S.db.inspections.filter(function (y) { return y.id === id; })[0]; S.inspEdit = JSON.parse(JSON.stringify(x)); S.inspPaste = false; S.inspPasteMsg = null; if (S.route !== 'inspect') go('inspect'); else render(); setTimeout(function () { var ie = $('insp-edit'); if (ie) ie.scrollIntoView({ block: 'start' }); }, 30); }
     else if (act === 'ir-add') { S.inspEdit.rows.push(blankRow()); render(); }
     else if (act === 'ir-del') { S.inspEdit.rows.splice(+el.getAttribute('data-i'), 1); render(); }
-    else if (act === 'save-insp') { saveInsp(); render(); toast('공정점검을 저장했습니다'); }
-    else if (act === 'close-insp') { S.inspEdit = null; render(); }
+    else if (act === 'save-insp') { saveInsp(); S.inspPasteMsg = null; render(); toast('공정점검을 저장했습니다'); }
+    else if (act === 'close-insp') { S.inspEdit = null; S.inspPasteMsg = null; render(); }
     else if (act === 'del-insp') { if (!confirm('이 공정점검을 지웁니다.')) return; S.db.inspections = S.db.inspections.filter(function (y) { return y.id !== S.inspEdit.id; }); S.inspEdit = null; save(); render(); }
     else if (act === 'insp-mail') { saveInsp(); S.mail = { vendorId: S.inspEdit.vendorId, inspId: S.inspEdit.id, type: 'internal', draft: null }; go('mail'); }
     else if (act === 'insp-findings') {
@@ -707,6 +765,38 @@
       var d = S.formDraft, form = QA.makeForm(d.kind, d.result, { name: $('fp-name').value.trim() || d.file, source: d.file + ' (올린 양식)', created: S.today });
       S.db.forms.push(form); S.db.activeForms[d.kind] = form.id; S.formDraft = null; save(); render(); toast(K[d.kind].name + ' 양식을 바꿨습니다 — 새 Audit 부터 이 양식을 씁니다');
     } else if (act === 'fp-cancel') { S.formDraft = null; render(); }
+    else if (act === 'paste-open') { var pk = el.getAttribute('data-kind'); S.pasteKind = pk; if (S.formDraft && S.formDraft.kind !== pk) S.formDraft = null; render(); var pt = $('paste-text'); if (pt) { pt.scrollIntoView({ block: 'center' }); pt.focus(); } }
+    else if (act === 'paste-close') { S.pasteKind = null; render(); }
+    else if (act === 'paste-read') {
+      var kd = el.getAttribute('data-kind'), txt = $('paste-text').value, part = $('paste-part') ? $('paste-part').value : null;
+      if (!txt.trim()) { toast('붙여 넣은 내용이 없습니다 — 엑셀에서 범위를 복사(Ctrl+C)한 뒤 칸에 붙여 넣으세요'); return; }
+      S.pastePart = part;
+      var prev = S.formDraft && S.formDraft.pasted && S.formDraft.kind === kd ? S.formDraft : null;
+      var bk = QA.pasteBook(kd, txt, prev, part);
+      S.formDraft = { kind: kd, file: '붙여넣기(' + K[kd].short + ')', names: bk.names, sheets: bk.sheets, opts: kd === 'B' ? {} : { sheet: bk.sheet }, pasted: true };
+      reparseDraft(); render(); toast(bk.rows + '줄 · ' + bk.cols + '열을 읽었습니다');
+      var fp2 = $('form-preview'); if (fp2) fp2.scrollIntoView({ block: 'start' });
+    }
+    else if (act === 'copy-sheet' || act === 'csv-sheet') {
+      var rp = QA.reportSheets(S.db, scope().vendorIds, S.today), sc2 = scope(), tg = (sc2.mode === 'vendor' ? sc2.vendor.name : sc2.mode === 'manager' ? mname(sc2.managerId) : '전체').replace(/[\\/:*?"<>|()\s]/g, '');
+      if (act === 'copy-sheet') {
+        var shn = el.getAttribute('data-sheet'), tsv = QA.toTSV(rp.sheets[shn]);
+        S.lastCopy = tsv;
+        copyText(tsv, function (okc) { toast(okc ? shn + ' 표(' + (rp.sheets[shn].length - 1) + '행)를 복사했습니다 — 엑셀 A1 칸에 붙여 넣으세요' : '복사하지 못했습니다 — 이 브라우저가 클립보드를 막았습니다'); });
+      } else rp.names.forEach(function (nm, i) { setTimeout(function () { download('협력업체품질_' + tg + '_' + S.today + '_' + nm + '.csv', new Blob([QA.toCSV(rp.sheets[nm])], { type: 'text/csv;charset=utf-8' })); }, i * 300); });
+    }
+    else if (act === 'restore-paste-open') { S.restorePaste = !S.restorePaste; render(); }
+    else if (act === 'restore-paste') { restoreFrom($('restore-text').value); }
+    else if (act === 'insp-paste-open') { S.inspPaste = !S.inspPaste; render(); var it2 = $('insp-paste-text'); if (it2) it2.focus(); }
+    else if (act === 'insp-paste-read') {
+      var itxt = $('insp-paste-text').value;
+      if (!itxt.trim()) { toast('붙여 넣은 내용이 없습니다'); return; }
+      var pr = QA.parseInspectRows(QA.parsePaste(itxt).aoa, { year: (S.inspEdit.date || S.today).slice(0, 4) });
+      if (!pr.ok) { S.inspPasteMsg = [pr.error].concat(pr.warnings); render(); return; }
+      var ex = S.inspEdit.rows.filter(function (r) { return r.process || r.item || r.check || r.problem || r.request || r.owner || r.due || (r.problemPhotos || []).length || (r.fixPhotos || []).length; });
+      S.inspEdit.rows = ex.concat(pr.rows); S.inspPaste = false; S.inspPasteMsg = ['점검 행 ' + pr.rows.length + '개를 넣었습니다(빈 행은 정리했습니다). 저장하려면 「점검 결과 저장」을 누르세요.'].concat(pr.warnings);
+      render();
+    }
   }
   function onInput(e) {
     var el = e.target, act = el.getAttribute('data-act'); if (!act) return;
@@ -762,12 +852,7 @@
       render();
     } else if (act === 'restore') {
       var rf = el.files[0]; if (!rf) return;
-      rf.text().then(function (t) {
-        var r2 = QA.restore(t);
-        if (!r2.ok) { toast('복원 실패: ' + r2.error); return; }
-        if (!confirm('지금 자료를 백업 파일 내용으로 바꿉니다. 계속할까요?')) return;
-        S.db = r2.db; clearPhotos().then(function () { return Promise.all(r2.photos.map(function (p) { return putPhoto(p.id, p.data); })); }).then(function () { save(); setSel('', ''); toast('복원했습니다'); });
-      });
+      rf.text().then(restoreFrom);
     } else if (act === 'ai-cfg') onInput(e);
   }
 

@@ -114,3 +114,10 @@ svg polyline.kC,svg polyline.kA,svg polyline.kD{fill:none;}
 .log{list-style:none; font-size:13px; margin:6px 0;} .log li{padding:4px 0; border-bottom:1px dashed var(--line);}
 .ai-box{border:1px dashed #93a7bd; border-radius:10px; padding:10px 14px; margin-top:12px; font-size:13.5px;}
 .toast{position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--navy); color:#fff; padding:10px 18px; border-radius:10px; font-size:14px; z-index:90; max-width:90vw;}
+
+/* 엑셀에서 복사해 붙여넣기 · 오프라인 (v1.1) */
+.card.inner{background:#f6f9fc; box-shadow:none; margin:12px 0;}
+.card.inner h3{margin-top:0;}
+textarea.paste{width:100%; box-sizing:border-box; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12.5px; line-height:1.45; white-space:pre; overflow:auto; tab-size:12;}
+.card.inner ol.sub{margin:4px 0 8px 1.2em; padding:0;}
+#copy-tables .btn{white-space:nowrap;}

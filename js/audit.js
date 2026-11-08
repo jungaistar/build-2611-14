@@ -392,7 +392,7 @@
   }
 
   /* ---------- 양식 엑셀 읽기 ---------- */
-  function norm(s) { return String(s == null ? '' : s).replace(/[\s ·.:()（）\[\]]/g, '').toLowerCase(); }
+  function norm(s) { return String(s == null ? '' : s).replace(/[\s\u00a0·.:()（）\[\]]/g, '').toLowerCase(); }
   var FIELDS = {
     A: { no: ['순', 'no', '번호'], item: ['항목', '항목ctq', 'ctq'], process: ['공정'], content: ['점검내용'], level: ['배점', 'level', '점수level'], weight: ['가중치'] },
     C: { process: ['공정', '공정구분'], no: ['no', '번호', '순'], content: ['점검내용및기준', '점검내용'], score: ['점수'], weight: ['가중치'] },
@@ -779,6 +779,149 @@
     return 'mailto:' + encodeURIComponent(to || '') + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
   }
 
+  /* ---------- 붙여넣기 · CSV · TXT (회사 노트북 DRM · 폐쇄망) ----------
+   * DRM 이 걸린 노트북은 브라우저 파일 고르기에서 .xlsx 를 열지 못한다. 엑셀에서 범위를 복사하면
+   * 클립보드에는 탭으로 나뉜 글자(TSV)가 들어간다 — 그것을 표(aoa)로 바꿔 파일과 같은 읽기(parseTable ·
+   * parseFormBook)에 넘긴다. 머리글 찾기 · 공정 물려받기 · 검사 규칙은 파일과 하나다. */
+  // 바이트 → 글자. BOM 이 있으면 따르고, UTF-8 로 깨지면 한국어 윈도 엑셀 CSV 의 기본 인코딩(CP949 · euc-kr)으로 읽는다.
+  function decodeText(bytes) {
+    var u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    if (u[0] === 0xEF && u[1] === 0xBB && u[2] === 0xBF) return new TextDecoder('utf-8').decode(u.subarray(3));
+    if (u[0] === 0xFF && u[1] === 0xFE) return new TextDecoder('utf-16le').decode(u.subarray(2));
+    if (u[0] === 0xFE && u[1] === 0xFF) return new TextDecoder('utf-16be').decode(u.subarray(2));
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(u); }
+    catch (e) { return new TextDecoder('euc-kr').decode(u); }
+  }
+  // 구분 글자 하나로 나눈 글자 → 표. 따옴표로 감싼 칸(엑셀이 줄바꿈 · 탭 · 따옴표가 든 칸을 이렇게 복사한다) 안의 구분 글자 · 줄바꿈은 칸의 일부다.
+  function parseDelimited(text, delim) {
+    var rows = [], row = [], f = '', i = 0, n = text.length, q = false, start = true;
+    while (i < n) {
+      var c = text[i];
+      if (q) {
+        if (c === '"') { if (text[i + 1] === '"') { f += '"'; i += 2; continue; } q = false; i++; continue; }
+        f += c; i++; continue;
+      }
+      if (start && c === '"') { q = true; start = false; i++; continue; }
+      start = false;
+      if (c === delim) { row.push(f); f = ''; start = true; i++; continue; }
+      if (c === '\r' || c === '\n') { row.push(f); rows.push(row); row = []; f = ''; start = true; i += (c === '\r' && text[i + 1] === '\n') ? 2 : 1; continue; }
+      f += c; i++;
+    }
+    if (f !== '' || row.length) { row.push(f); rows.push(row); }
+    return rows;
+  }
+  // 붙여넣은 글자 · CSV · TXT 를 표로. 탭이 있으면 탭(엑셀 복사), 없으면 쉼표(CSV), 쉼표도 없으면 한 열.
+  // 칸 앞뒤 공백을 걷고, 끝의 빈 줄 · 빈 열은 버린다. 가운데 빈 줄은 남긴다(파일 읽기와 같이 「빈 행 3개에서 멈춤」을 지키려고).
+  function parsePaste(text, opts) {
+    opts = opts || {};
+    text = String(text == null ? '' : text).replace(/^\uFEFF/, '');
+    var probe = text.split(/\r?\n/).slice(0, 50).join('\n');
+    var delim = opts.delim || (probe.indexOf('\t') >= 0 ? '\t' : /,/.test(probe) ? ',' : probe.indexOf(';') >= 0 ? ';' : '\t');
+    var aoa = parseDelimited(text, delim).map(function (r) { return r.map(function (c) { return c.replace(/\u00a0/g, ' ').trim(); }); });
+    while (aoa.length && aoa[aoa.length - 1].every(function (c) { return c === ''; })) aoa.pop();
+    var w = 0;
+    aoa.forEach(function (r) { for (var j = r.length - 1; j >= 0; j--) if (r[j] !== '') { if (j + 1 > w) w = j + 1; break; } });
+    aoa = aoa.map(function (r) { r = r.slice(0, w); while (r.length < w) r.push(''); return r; });
+    return { aoa: aoa, delim: delim === '\t' ? 'tab' : delim === ',' ? 'comma' : 'semicolon', rows: aoa.length, cols: w };
+  }
+  // 표 → 엑셀에 붙여 넣을 글자(TSV). 탭 · 줄바꿈 · 따옴표가 든 칸은 따옴표로 감싼다(엑셀이 그대로 다시 읽는다).
+  function toTSV(aoa) {
+    return (aoa || []).map(function (r) {
+      return (r || []).map(function (c) { var s = c == null ? '' : String(c); return /[\t\r\n"]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join('\t');
+    }).join('\r\n');
+  }
+  // 표 → CSV(엑셀이 한글을 바로 읽도록 BOM 을 붙인다).
+  function toCSV(aoa) {
+    return '\uFEFF' + (aoa || []).map(function (r) {
+      return (r || []).map(function (c) { var s = c == null ? '' : String(c); return /[,\r\n"]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',');
+    }).join('\r\n');
+  }
+  // 날짜 칸 → 'YYYY-MM-DD'. 빈 칸은 '', 못 읽으면 null.
+  // 2026-11-04 · 2026.11.04 · 2026. 11. 4. · 2026/11/4 · 2026년 11월 4일 · 26.11.04 · 20261104 · 2026-11-04 09:30 · 요일 꼬리표 (수) ·
+  // 엑셀 날짜 일련번호(46330) · 연도 없는 11/4 · 11월 4일(opts.year 가 있을 때만).
+  function normDate(v, opts) {
+    opts = opts || {};
+    if (v === null || v === undefined) return '';
+    if (v instanceof Date) return isNaN(v) ? null : ymd(v);
+    if (typeof v === 'number') return serialDate(v);
+    var s = String(v).trim();
+    if (!s) return '';
+    s = s.replace(/\s*\((월|화|수|목|금|토|일)\)\s*/, ' ').replace(/\s+((오전|오후)\s*)?\d{1,2}:\d{2}(:\d{2})?\s*$/, '').trim();
+    var m, y, mo, d;
+    if ((m = s.match(/^(\d{4}|\d{2})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})\s*일?\s*\.?$/))) { y = +m[1]; mo = +m[2]; d = +m[3]; if (m[1].length === 2) y += 2000; }
+    else if ((m = s.match(/^(\d{4})(\d{2})(\d{2})$/))) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+    else if ((m = s.match(/^(\d{1,2})\s*[-./월]\s*(\d{1,2})\s*일?\s*\.?$/))) { if (!opts.year) return null; y = +opts.year; mo = +m[1]; d = +m[2]; }
+    else if (/^\d{4,5}(\.\d+)?$/.test(s)) return serialDate(Number(s));
+    else return null;
+    var dt = new Date(y, mo - 1, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;   // 2월 30일 같은 날은 받지 않는다
+    return ymd(dt);
+  }
+  // 엑셀 날짜 일련번호(1900 체계: 25569 = 1970-01-01). 2000~2100 년 사이만 날짜로 본다.
+  function serialDate(n) {
+    if (!(n >= 36526 && n < 73051)) return null;
+    var t = new Date(Math.round((Math.floor(n) - 25569) * 864e5));
+    return t.getUTCFullYear() + '-' + pad2(t.getUTCMonth() + 1) + '-' + pad2(t.getUTCDate());
+  }
+  // 붙여넣은 표 하나로 양식 읽기 — 파일과 같은 parseFormBook. PSO 는 부분마다 시트 이름을 붙여 쌓는다
+  // ('Pre-PSO 기본' · 'Pre-PSO 상세' · 'PSO 기본' — 이름에 Pre 가 있으면 Pre-PSO 로 읽는 파일 규칙과 같다).
+  var PASTE_PARTS = { preBasic: 'Pre-PSO 기본(붙여넣기)', preDetail: 'Pre-PSO 상세(붙여넣기)', psoBasic: 'PSO 기본(붙여넣기)' };
+  function pasteBook(kind, text, prev, part) {
+    var p = parsePaste(text), name = kind === 'B' ? PASTE_PARTS[part || 'preBasic'] : '붙여넣기';
+    var sheets = {}, names = [];
+    if (prev && kind === 'B') { names = prev.names.filter(function (n) { return n !== name; }); names.forEach(function (n) { sheets[n] = prev.sheets[n]; }); }
+    sheets[name] = p.aoa; names.push(name);
+    return { names: names, sheets: sheets, sheet: name, rows: p.rows, cols: p.cols, delim: p.delim };
+  }
+
+  // 공정점검 행 붙여넣기 — 엑셀로 쓰던 가로형 점검표를 그대로 옮긴다. 머리글이 있으면 낱말로 열을 찾고,
+  // 없으면 화면 열 순서(점검 공정 · 점검 항목 · 확인 내용 · 문제점 · 개선 요청사항 · 담당자 · 완료 예정일 · 진행상태)로 읽는다.
+  var INSPECT_FIELDS = { no: ['no', '번호', '순'], process: ['점검공정', '공정'], item: ['점검항목', '항목'], check: ['확인내용', '확인사항', '확인'], problem: ['문제점'],
+    request: ['개선요청사항', '개선요청', '요청사항'], owner: ['담당자', '담당'], due: ['완료예정일', '예정일', '완료요청일'], state: ['진행상태', '상태'] };
+  var INSPECT_ORDER = ['process', 'item', 'check', 'problem', 'request', 'owner', 'due', 'state'];
+  function normState(v) {
+    var s = String(v == null ? '' : v).replace(/\s/g, '');
+    if (!s) return '요청';
+    if (/^(요청|미착수|접수|계획)$/.test(s)) return '요청';
+    if (/^(조치중|진행중|진행|개선중|개선진행중)$/.test(s)) return '조치 중';
+    if (/^(완료|조치완료|개선완료|확인완료)$/.test(s)) return '완료';
+    return null;
+  }
+  function parseInspectRows(aoa, opts) {
+    opts = opts || {};
+    var warnings = [], hdr = null;
+    for (var i = 0; i < Math.min(aoa.length, 40); i++) {
+      var mp = matchHeader(aoa[i], INSPECT_FIELDS), keys = Object.keys(mp);
+      if (keys.length >= 3 && (mp.item != null || mp.problem != null)) { hdr = { row: i, map: mp }; break; }
+    }
+    var M, start;
+    if (hdr) { M = hdr.map; start = hdr.row + 1; }
+    else {
+      var data = aoa.filter(function (r) { return r.some(function (c) { return !blank(c); }); });
+      var lead = data.length && data.every(function (r) { return /^\d+$/.test(String(r[0]).trim()); });
+      M = {}; INSPECT_ORDER.forEach(function (f, j) { M[f] = j + (lead ? 1 : 0); }); if (lead) M.no = 0;
+      start = 0;
+      warnings.push('머리글 줄이 없어 화면 열 순서(' + (lead ? 'No · ' : '') + '점검 공정 · 점검 항목 · 확인 내용 · 문제점 · 개선 요청사항 · 담당자 · 완료 예정일 · 진행상태)로 읽었습니다');
+    }
+    var rows = [];
+    for (var k = start; k < aoa.length; k++) {
+      var r = aoa[k] || [];
+      if (isTotalRow(r)) break;
+      var o = { process: cell(r, M.process), item: cell(r, M.item), check: cell(r, M.check), problem: cell(r, M.problem), problemPhotos: [], request: cell(r, M.request), fixPhotos: [], owner: cell(r, M.owner), due: '', state: '요청' };
+      if (!o.process && !o.item && !o.check && !o.problem && !o.request) continue;   // 빈 줄 · 번호만 있는 줄은 건너뛴다
+      var line = (k + 1) + '번째 줄';
+      var dRaw = M.due == null || !r ? '' : r[M.due], dd = normDate(dRaw, { year: opts.year });
+      if (dd === null) warnings.push(line + ' 완료 예정일 「' + String(dRaw).trim() + '」을(를) 날짜로 읽지 못해 비워 두었습니다');
+      else o.due = dd;
+      var st = normState(cell(r, M.state));
+      if (st === null) { warnings.push(line + ' 진행상태 「' + cell(r, M.state) + '」은(는) 요청 · 조치 중 · 완료 가 아니어서 「요청」으로 두었습니다'); st = '요청'; }
+      o.state = st;
+      rows.push(o);
+    }
+    if (!rows.length) return { ok: false, error: '붙여넣은 표에서 점검 행을 찾지 못했습니다', rows: [], warnings: warnings };
+    return { ok: true, rows: rows, warnings: warnings, headerRow: hdr ? hdr.row : null, map: M };
+  }
+
   /* ---------- 내보내기 · 백업 ---------- */
   function nameOf(list, id) { var x = (list || []).filter(function (v) { return v.id === id; })[0]; return x ? x.name : ''; }
   function reportSheets(db, vendorIds, today) {
@@ -933,6 +1076,8 @@
     scopeOf: scopeOf, vendorRow: vendorRow, dashboard: dashboard, series: series, improvement: improvement, weakProcesses: weakProcesses,
     matchHeader: matchHeader, findHeader: findHeader, parseTable: parseTable, parseFormBook: parseFormBook, parseOptions: parseOptions, makeForm: makeForm, formSize: formSize, formMax: formMax,
     sampleForms: sampleForms, sampleFormBook: sampleFormBook,
+    decodeText: decodeText, parseDelimited: parseDelimited, parsePaste: parsePaste, toTSV: toTSV, toCSV: toCSV, normDate: normDate, serialDate: serialDate, pasteBook: pasteBook, PASTE_PARTS: PASTE_PARTS,
+    INSPECT_FIELDS: INSPECT_FIELDS, normState: normState, parseInspectRows: parseInspectRows,
     fitSize: fitSize, inspectionSummary: inspectionSummary, buildMail: buildMail, mailto: mailto,
     reportSheets: reportSheets, emptyDb: emptyDb, backup: backup, restore: restore, placeholderPhoto: placeholderPhoto, sample: sample
   };
